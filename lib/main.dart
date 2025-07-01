@@ -1927,51 +1927,124 @@ class _StatsScreenState extends State<StatsScreen> {
             Container(
               height: 200,
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: data.map((entry) {
-                  final totalDuration = entry.value.fold(0, (sum, record) => sum + record.duration);
-                  // 表示数値（合計時間）と高さ計算を一致させる
-                  final height = maxTotalDuration > 0 ? (totalDuration / maxTotalDuration) * 140.0 : 0.0;
-                  
-                  return Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 2),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text('${totalDuration}s', 
-                               style: TextStyle(fontSize: 10),
-                               textAlign: TextAlign.center),
-                          SizedBox(height: 4),
-                          Container(
-                            width: double.infinity,
-                            height: height.clamp(0.0, 140.0),
-                            decoration: BoxDecoration(
-                              color: _getColorForRecordCount(entry.value.length), // Use helper for color
-                              borderRadius: BorderRadius.circular(4),
+                children: [
+                  // Y軸ラベルとメモリ線
+                  _buildYAxis(maxTotalDuration),
+                  SizedBox(width: 8),
+                  // グラフ本体
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: data.map((entry) {
+                        final totalDuration = entry.value.fold(0, (sum, record) => sum + record.duration);
+                        final height = maxTotalDuration > 0 ? (totalDuration / maxTotalDuration) * 140.0 : 0.0;
+
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 2),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text('${totalDuration}s',
+                                     style: TextStyle(fontSize: 10),
+                                     textAlign: TextAlign.center),
+                                SizedBox(height: 4),
+                                Container(
+                                  width: double.infinity,
+                                  height: height.clamp(0.0, 140.0),
+                                  decoration: BoxDecoration(
+                                    color: _getColorForRecordCount(entry.value.length),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  _formatDateLabel(entry.key, data.indexOf(entry), data, _selectedPeriod),
+                                  style: TextStyle(fontSize: _getXAxisLabelFontSize(_selectedPeriod)),
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (_selectedPeriod == '7days') // 7日間表示の場合のみ曜日を表示
+                                  Text(
+                                    ['日', '月', '火', '水', '木', '金', '土'][entry.key.weekday % 7],
+                                    style: TextStyle(fontSize: 8, color: Colors.grey),
+                                    textAlign: TextAlign.center,
+                                  ),
+                              ],
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            '${entry.key.month}/${entry.key.day}',
-                            style: TextStyle(fontSize: 10),
-                            textAlign: TextAlign.center,
-                          ),
-                          Text(
-                            ['日', '月', '火', '水', '木', '金', '土'][entry.key.weekday % 7],
-                            style: TextStyle(fontSize: 8, color: Colors.grey),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
+                        );
+                      }).toList(),
                     ),
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _formatDateLabel(DateTime date, int index, List<MapEntry<DateTime, List<PlankRecord>>> data, String period) {
+    // 期間表示が長い場合は、ラベルを間引くか、月の初日のみ月を表示するなどの調整も検討できます。
+    // ここでは、月の初日のみ月/日、それ以外は日のみとします。
+    if (date.day == 1 || index == 0) {
+      return '${date.month}/${date.day}';
+    }
+    return '${date.day}';
+  }
+
+  double _getXAxisLabelFontSize(String period) {
+    if (period == '90days') {
+      return 8.0;
+    } else if (period == '30days') {
+      return 9.0;
+    }
+    return 10.0; // 7days
+  }
+
+  Widget _buildYAxis(int maxDuration) {
+    const double graphDisplayHeight = 140.0; // グラフのバーが表示される実際の高さ
+    const int numberOfLines = 5; // 表示するメモリ線の数（0sを含む）
+
+    if (maxDuration == 0) {
+      // データがない場合でも、X軸ラベルとの縦位置を合わせるために一定の高さを確保
+      return Container(
+        width: 35,
+        // height: graphDisplayHeight + 10.0 + 4.0 + 4.0 + 10.0 + (_selectedPeriod == '7days' ? 8.0 : 0.0), // X軸要素の高さを加味
+        // Y軸コンテナ自体の高さはグラフ描画エリアに合わせる
+        height: graphDisplayHeight,
+      );
+    }
+
+    List<Widget> yAxisItems = [];
+    for (int i = 0; i < numberOfLines; i++) {
+      final value = (maxDuration / (numberOfLines - 1) * i).round();
+      yAxisItems.add(
+        Expanded(
+          child: Align(
+            // i=0 (最下部=0s) は一番下(-1.0), i=numberOfLines-1 (最上部=max) は一番上(1.0)
+            alignment: Alignment(1.0, (i / (numberOfLines - 1.0)) * 2.0 - 1.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text('${value}s', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                SizedBox(width: 2),
+                Container(width: 4, height: 1, color: Colors.grey[300]),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: 35,
+      height: graphDisplayHeight, // Y軸の描画エリアの高さをグラフのバーの高さに正確に合わせる
+      child: Column(
+        children: yAxisItems,
       ),
     );
   }
