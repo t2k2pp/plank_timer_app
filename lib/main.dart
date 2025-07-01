@@ -1781,6 +1781,7 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   List<PlankRecord> _records = [];
+  String _selectedPeriod = '7days'; // '7days', '30days', '90days'
   
   @override
   void initState() {
@@ -1796,12 +1797,12 @@ class _StatsScreenState extends State<StatsScreen> {
     });
   }
 
-  List<MapEntry<DateTime, List<PlankRecord>>> _getLast7DaysData() {
+  List<MapEntry<DateTime, List<PlankRecord>>> _getDataForPeriod(int days) {
     final now = DateTime.now();
-    final last7Days = List.generate(7, (index) => 
-      DateTime(now.year, now.month, now.day).subtract(Duration(days: 6 - index)));
+    final periodDays = List.generate(days, (index) =>
+      DateTime(now.year, now.month, now.day).subtract(Duration(days: days - 1 - index)));
     
-    return last7Days.map((date) {
+    return periodDays.map((date) {
       final dayRecords = _records.where((record) => 
         record.date.year == date.year &&
         record.date.month == date.month &&
@@ -1809,25 +1810,77 @@ class _StatsScreenState extends State<StatsScreen> {
       ).toList();
       return MapEntry(date, dayRecords);
     }).toList();
+  }
+
+  List<MapEntry<DateTime, List<PlankRecord>>> _getLast7DaysData() {
+    return _getDataForPeriod(7);
   }
 
   List<MapEntry<DateTime, List<PlankRecord>>> _getLast30DaysData() {
-    final now = DateTime.now();
-    final last30Days = List.generate(30, (index) => 
-      DateTime(now.year, now.month, now.day).subtract(Duration(days: 29 - index)));
-    
-    return last30Days.map((date) {
-      final dayRecords = _records.where((record) => 
-        record.date.year == date.year &&
-        record.date.month == date.month &&
-        record.date.day == date.day
-      ).toList();
-      return MapEntry(date, dayRecords);
-    }).toList();
+    return _getDataForPeriod(30);
   }
 
-  Widget _buildWeeklyChart() {
-    final data = _getLast7DaysData();
+  List<MapEntry<DateTime, List<PlankRecord>>> _getLast90DaysData() {
+    return _getDataForPeriod(90);
+  }
+
+  List<MapEntry<DateTime, List<PlankRecord>>> _getSelectedPeriodData() {
+    switch (_selectedPeriod) {
+      case '30days':
+        return _getLast30DaysData();
+      case '90days':
+        return _getLast90DaysData();
+      case '7days':
+      default:
+        return _getLast7DaysData();
+    }
+  }
+
+  Color _getColorForRecordCount(int count) {
+    if (count == 0) return Colors.grey[300]!;
+    if (count == 1) return Colors.green[300]!;
+    if (count == 2) return Colors.blue[300]!;
+    if (count == 3) return Colors.orange[300]!;
+    return Colors.purple[300]!; // 4回以上
+  }
+
+  Widget _buildPeriodSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ElevatedButton(
+            onPressed: () => setState(() => _selectedPeriod = '7days'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _selectedPeriod == '7days' ? Colors.purple : Colors.grey,
+            ),
+            child: Text('7日間'),
+          ),
+          SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => setState(() => _selectedPeriod = '30days'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _selectedPeriod == '30days' ? Colors.purple : Colors.grey,
+            ),
+            child: Text('30日間'),
+          ),
+          SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => setState(() => _selectedPeriod = '90days'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _selectedPeriod == '90days' ? Colors.purple : Colors.grey,
+            ),
+            child: Text('90日間'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChart() {
+    final data = _getSelectedPeriodData();
+    final periodTitle = _selectedPeriod == '7days' ? '過去7日間' : _selectedPeriod == '30days' ? '過去30日間' : '過去90日間';
     
     if (data.isEmpty) {
       return Card(
@@ -1867,7 +1920,7 @@ class _StatsScreenState extends State<StatsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('📊 過去7日間の実施時間', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('📊 $periodTitleの実施時間', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             SizedBox(height: 8),
             Text('グラフの高さ = その日の合計実施時間', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
             SizedBox(height: 16),
@@ -1895,7 +1948,7 @@ class _StatsScreenState extends State<StatsScreen> {
                             width: double.infinity,
                             height: height.clamp(0.0, 140.0),
                             decoration: BoxDecoration(
-                              color: totalDuration > 0 ? Colors.purple : Colors.grey[300],
+                              color: _getColorForRecordCount(entry.value.length), // Use helper for color
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
@@ -2100,7 +2153,8 @@ class _StatsScreenState extends State<StatsScreen> {
             child: Column(
               children: [
                 _buildStatsCards(),
-                _buildWeeklyChart(),
+                _buildPeriodSelector(), // Added period selector
+                _buildChart(), // Changed from _buildWeeklyChart
                 _buildMonthlyTrend(),
                 SizedBox(height: 20),
               ],
