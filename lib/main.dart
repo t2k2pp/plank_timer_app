@@ -2034,7 +2034,6 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildYAxis(int maxDuration) {
     const double graphDisplayHeight = 140.0; // グラフのバーが表示される実際の高さ
-    const double graphDisplayHeight = 140.0; // グラフのバーが表示される実際の高さ
     const int defaultNumberOfLines = 5; // 表示するメモリ線の数（0sを含む）
     int numberOfLines = defaultNumberOfLines;
     int stepSize = 0;
