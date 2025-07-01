@@ -1933,15 +1933,18 @@ class _StatsScreenState extends State<StatsScreen> {
                   SizedBox(width: 8),
                   // グラフ本体
                   Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: data.map((entry) {
-                        final totalDuration = entry.value.fold(0, (sum, record) => sum + record.duration);
-                        final height = maxTotalDuration > 0 ? (totalDuration / maxTotalDuration) * 140.0 : 0.0;
+                    child: SingleChildScrollView( // 横スクロールのために追加
+                      scrollDirection: Axis.horizontal, // 横スクロールを指定
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: data.map((entry) {
+                          final totalDuration = entry.value.fold(0, (sum, record) => sum + record.duration);
+                          final height = maxTotalDuration > 0 ? (totalDuration / maxTotalDuration) * 140.0 : 0.0;
+                          final barWidth = _getBarWidth(_selectedPeriod); // 期間に応じたバーの幅を取得
 
-                        return Expanded(
-                          child: Padding(
+                          return Container( // ExpandedをContainerに変更し、幅を指定
+                            width: barWidth,
                             padding: EdgeInsets.symmetric(horizontal: 2),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.end,
@@ -1963,6 +1966,7 @@ class _StatsScreenState extends State<StatsScreen> {
                                   _formatDateLabel(entry.key, data.indexOf(entry), data, _selectedPeriod),
                                   style: TextStyle(fontSize: _getXAxisLabelFontSize(_selectedPeriod)),
                                   textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis, // ラベルが長い場合に省略
                                 ),
                                 if (_selectedPeriod == '7days') // 7日間表示の場合のみ曜日を表示
                                   Text(
@@ -1972,9 +1976,9 @@ class _StatsScreenState extends State<StatsScreen> {
                                   ),
                               ],
                             ),
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ],
@@ -1987,12 +1991,36 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   String _formatDateLabel(DateTime date, int index, List<MapEntry<DateTime, List<PlankRecord>>> data, String period) {
-    // 期間表示が長い場合は、ラベルを間引くか、月の初日のみ月を表示するなどの調整も検討できます。
-    // ここでは、月の初日のみ月/日、それ以外は日のみとします。
-    if (date.day == 1 || index == 0) {
-      return '${date.month}/${date.day}';
+    final isFirst = index == 0;
+    final isLast = index == data.length - 1;
+
+    if (period == '7days') {
+      return '${date.month}/${date.day}'; // 7日間表示は全て月/日
+    } else if (period == '30days') {
+      // 最初、最後、または5の倍数のインデックス、または月の初日
+      if (isFirst || isLast || date.day == 1 || (index % 5 == 0) ) {
+        return '${date.month}/${date.day}';
+      }
+      return ''; // 間引く場合は空文字
+    } else if (period == '90days') {
+      // 最初、最後、または15の倍数のインデックス、または月の初日
+      if (isFirst || isLast || date.day == 1 || (index % 15 == 0)) {
+        return '${date.month}/${date.day}';
+      }
+      return ''; // 間引く場合は空文字
     }
-    return '${date.day}';
+    // デフォルト（ありえないが念のため）
+    return '${date.month}/${date.day}';
+  }
+
+  // 期間に応じてバーの幅を返すヘルパーメソッド
+  double _getBarWidth(String period) {
+    if (period == '90days') {
+      return 30.0; // 90日表示の場合はバーを細くする
+    } else if (period == '30days') {
+      return 40.0; // 30日表示
+    }
+    return 50.0; // 7日表示
   }
 
   double _getXAxisLabelFontSize(String period) {
@@ -2006,31 +2034,24 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildYAxis(int maxDuration) {
     const double graphDisplayHeight = 140.0; // グラフのバーが表示される実際の高さ
-    const int numberOfLines = 5; // 表示するメモリ線の数（0sを含む）
-
-    if (maxDuration == 0) {
-      // データがない場合でも、X軸ラベルとの縦位置を合わせるために一定の高さを確保
-      return Container(
-        width: 35,
-        // height: graphDisplayHeight + 10.0 + 4.0 + 4.0 + 10.0 + (_selectedPeriod == '7days' ? 8.0 : 0.0), // X軸要素の高さを加味
-        // Y軸コンテナ自体の高さはグラフ描画エリアに合わせる
-        height: graphDisplayHeight,
-      );
-    }
+    const double graphDisplayHeight = 140.0; // グラフのバーが表示される実際の高さ
+    const int defaultNumberOfLines = 5; // 表示するメモリ線の数（0sを含む）
+    int numberOfLines = defaultNumberOfLines;
+    int stepSize = 0;
 
     List<Widget> yAxisItems = [];
-    for (int i = 0; i < numberOfLines; i++) {
-      final value = (maxDuration / (numberOfLines - 1) * i).round();
+
+    if (maxDuration == 0) {
+      // データがない場合でも0sのラベルを表示
       yAxisItems.add(
         Expanded(
           child: Align(
-            // i=0 (最下部=0s) は一番下(-1.0), i=numberOfLines-1 (最上部=max) は一番上(1.0)
-            alignment: Alignment(1.0, (i / (numberOfLines - 1.0)) * 2.0 - 1.0),
+            alignment: Alignment(1.0, 1.0), // 一番下に配置
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('${value}s', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                Text('0s', style: TextStyle(fontSize: 8, color: Colors.grey)),
                 SizedBox(width: 2),
                 Container(width: 4, height: 1, color: Colors.grey[300]),
               ],
@@ -2038,7 +2059,109 @@ class _StatsScreenState extends State<StatsScreen> {
           ),
         ),
       );
+      // 他の線は表示しないため、上部にスペーサーを追加して高さを維持
+      for (int i = 1; i < numberOfLines; i++) {
+        yAxisItems.add(Expanded(child: Container()));
+      }
+    } else {
+      // 最大値に基づいて適切なステップサイズを決定
+      if (maxDuration <= 10) {
+        stepSize = 2; numberOfLines = (maxDuration / stepSize).ceil() + 1;
+      } else if (maxDuration <= 30) {
+        stepSize = 5; numberOfLines = (maxDuration / stepSize).ceil() + 1;
+      } else if (maxDuration <= 60) {
+        stepSize = 10; numberOfLines = (maxDuration / stepSize).ceil() + 1;
+      } else if (maxDuration <= 120) {
+        stepSize = 20; numberOfLines = (maxDuration / stepSize).ceil() + 1;
+      } else if (maxDuration <= 300) {
+        stepSize = 50; numberOfLines = (maxDuration / stepSize).ceil() + 1;
+      } else if (maxDuration <= 600) {
+        stepSize = 100; numberOfLines = (maxDuration / stepSize).ceil() + 1;
+      } else {
+        stepSize = (maxDuration / (defaultNumberOfLines -1 )).ceil();
+        // stepSizeを5の倍数に丸める (例: 23 -> 25, 51 -> 55)
+        stepSize = ((stepSize + 4) ~/ 5) * 5;
+        numberOfLines = (maxDuration / stepSize).ceil() +1;
+        if (numberOfLines < 2) numberOfLines = 2; // 最小でも2本は表示
+      }
+      if (numberOfLines > 7) numberOfLines = 7; // 最大でも7本程度に抑える
+
+      for (int i = 0; i < numberOfLines; i++) {
+        final value = (i * stepSize).round();
+        // 最大値を超えるラベルは表示しない（ただし最後の線は最大値に最も近いステップ値とする）
+        if (i == numberOfLines -1 && value < maxDuration) {
+           // 最後の線は実際のmaxDurationにするか、stepSizeの倍数のままにするか検討
+           // ここでは、stepSizeの倍数で、maxDurationを超えない最大のものを表示し、
+           // さらにmaxDuration自体も表示するか検討。
+           // 今回は、maxDurationに最も近いstepSizeの倍数を表示する。
+           // もしmaxDurationがstepSizeの倍数でない場合、最上位の線はmaxDurationそのものを表示する方が良いかもしれない。
+           // 以下は、最上位の線はmaxDurationそのものを表示するロジック（ただし、表示位置の調整が必要）
+           // final displayValue = (i == numberOfLines - 1) ? maxDuration : value;
+           // alignmentの調整も必要になる
+        }
+
+
+        yAxisItems.add(
+          Expanded(
+            child: Align(
+              alignment: Alignment(1.0, (i / (numberOfLines - 1.0)) * 2.0 - 1.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text('${value}s', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                  SizedBox(width: 2),
+                  Container(width: 4, height: 1, color: Colors.grey[300]),
+                ],
+              ),
+            ),
+          ),
+        );
+         if (value >= maxDuration && i < numberOfLines -1) break; // 最大値を超えたら以降のメモリは不要
+      }
+       // numberOfLinesが動的に変わるため、もしyAxisItemsが少ない場合はスペーサーで埋める
+      while(yAxisItems.length < defaultNumberOfLines && yAxisItems.length > 0) {
+        yAxisItems.insert(0, Expanded(child: Container())); // 上にスペーサーを追加
+      }
+      if (yAxisItems.isEmpty && maxDuration > 0) { // 稀なケースだが、計算結果yAxisItemsが空になる場合
+         yAxisItems.add(
+            Expanded(
+              child: Align(
+                alignment: Alignment(1.0, 1.0), // 一番下に配置
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('0s', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                    SizedBox(width: 2),
+                    Container(width: 4, height: 1, color: Colors.grey[300]),
+                  ],
+                ),
+              ),
+            ),
+          );
+          yAxisItems.add(
+            Expanded(
+              child: Align(
+                alignment: Alignment(1.0, -1.0), // 一番上に配置
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('${maxDuration}s', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                    SizedBox(width: 2),
+                    Container(width: 4, height: 1, color: Colors.grey[300]),
+                  ],
+                ),
+              ),
+            ),
+          );
+          for (int i = 2; i < defaultNumberOfLines; i++) {
+             yAxisItems.insert(1, Expanded(child: Container()));
+          }
+      }
     }
+
 
     return Container(
       width: 35,
